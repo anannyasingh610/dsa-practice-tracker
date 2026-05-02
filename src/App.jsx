@@ -9,24 +9,31 @@ import {
   Award,
   X,
   Trash2,
-  Check
+  Check,
+  Lock
 } from 'lucide-react';
+import { database } from './firebase';
+import { ref, onValue, set, remove } from 'firebase/database';
 
 function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [data, setData] = useState(() => {
-    const saved = localStorage.getItem('accountabilityData');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [data, setData] = useState({});
   const [selectedDate, setSelectedDate] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({ name: '', questions: '' });
 
   const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  // Sync with Firebase
   useEffect(() => {
-    localStorage.setItem('accountabilityData', JSON.stringify(data));
-  }, [data]);
+    const dataRef = ref(database, 'accountability');
+    const unsubscribe = onValue(dataRef, (snapshot) => {
+      const firebaseData = snapshot.val();
+      setData(firebaseData || {});
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
@@ -84,6 +91,16 @@ function App() {
     );
   };
 
+  const canEditDate = (dateKey) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDateObj = new Date(dateKey);
+    selectedDateObj.setHours(0, 0, 0, 0);
+
+    // Only allow editing today's date
+    return selectedDateObj.getTime() === today.getTime();
+  };
+
   const getMonthStats = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -111,6 +128,9 @@ function App() {
   };
 
   const openModal = (dateKey) => {
+    if (!canEditDate(dateKey)) {
+      return; // Don't open modal for past or future dates
+    }
     setSelectedDate(dateKey);
     setFormData({ name: '', questions: '' });
     setIsModalOpen(true);
@@ -122,32 +142,34 @@ function App() {
     setFormData({ name: '', questions: '' });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || formData.questions < 0) return;
 
-    const newData = { ...data };
-    if (!newData[selectedDate]) {
-      newData[selectedDate] = [];
-    }
-
-    newData[selectedDate].push({
+    const newEntry = {
       name: formData.name,
       questions: parseInt(formData.questions),
       timestamp: new Date().toISOString(),
-    });
+    };
 
-    setData(newData);
+    const dateRef = ref(database, `accountability/${selectedDate}`);
+    const currentEntries = data[selectedDate] || [];
+    const updatedEntries = [...currentEntries, newEntry];
+
+    await set(dateRef, updatedEntries);
     closeModal();
   };
 
-  const deleteEntry = (index) => {
-    const newData = { ...data };
-    newData[selectedDate].splice(index, 1);
-    if (newData[selectedDate].length === 0) {
-      delete newData[selectedDate];
+  const deleteEntry = async (index) => {
+    const dateRef = ref(database, `accountability/${selectedDate}`);
+    const currentEntries = [...data[selectedDate]];
+    currentEntries.splice(index, 1);
+
+    if (currentEntries.length === 0) {
+      await remove(dateRef);
+    } else {
+      await set(dateRef, currentEntries);
     }
-    setData(newData);
   };
 
   const days = getDaysInMonth(currentDate);
@@ -260,26 +282,38 @@ function App() {
               const dateKey = getDateKey(dayInfo.day, dayInfo.month, dayInfo.year);
               const dayData = data[dateKey] || [];
               const isTodayDate = isToday(dayInfo.day, dayInfo.month, dayInfo.year);
+              const isEditable = canEditDate(dateKey);
+              const isPast = new Date(dateKey) < new Date(new Date().setHours(0, 0, 0, 0));
+              const isFuture = new Date(dateKey) > new Date(new Date().setHours(0, 0, 0, 0));
 
               return (
                 <motion.div
                   key={index}
-                  whileHover={!dayInfo.isOtherMonth ? { scale: 1.05 } : {}}
-                  whileTap={!dayInfo.isOtherMonth ? { scale: 0.98 } : {}}
+                  whileHover={!dayInfo.isOtherMonth && isEditable ? { scale: 1.05 } : {}}
+                  whileTap={!dayInfo.isOtherMonth && isEditable ? { scale: 0.98 } : {}}
                   onClick={() => !dayInfo.isOtherMonth && openModal(dateKey)}
                   className={`
-                    relative min-h-[100px] md:min-h-[120px] p-3 rounded-xl cursor-pointer transition-all
+                    relative min-h-[100px] md:min-h-[120px] p-3 rounded-xl transition-all
                     ${dayInfo.isOtherMonth
-                      ? 'bg-gray-100/50 opacity-40'
+                      ? 'bg-gray-100/50 opacity-40 cursor-default'
                       : isTodayDate
-                      ? 'bg-gradient-to-br from-primary-500 to-secondary-500 text-white shadow-lg'
-                      : 'bg-white hover:shadow-lg'
+                      ? 'bg-gradient-to-br from-primary-500 to-secondary-500 text-white shadow-lg cursor-pointer'
+                      : isPast
+                      ? 'bg-gray-50 cursor-default opacity-70'
+                      : isFuture
+                      ? 'bg-gray-100 cursor-not-allowed opacity-60'
+                      : 'bg-white hover:shadow-lg cursor-pointer'
                     }
-                    ${dayData.length > 0 && !isTodayDate ? 'border-2 border-primary-300' : 'border border-gray-200'}
+                    ${dayData.length > 0 && !isTodayDate && !isFuture ? 'border-2 border-primary-300' : 'border border-gray-200'}
                   `}
                 >
-                  <div className={`font-semibold mb-2 ${isTodayDate ? 'text-white' : 'text-gray-700'}`}>
-                    {dayInfo.day}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={`font-semibold ${isTodayDate ? 'text-white' : isPast ? 'text-gray-500' : isFuture ? 'text-gray-400' : 'text-gray-700'}`}>
+                      {dayInfo.day}
+                    </div>
+                    {(isPast || isFuture) && !dayInfo.isOtherMonth && (
+                      <Lock className={`w-3 h-3 ${isTodayDate ? 'text-white' : 'text-gray-400'}`} />
+                    )}
                   </div>
 
                   <div className="space-y-1">
