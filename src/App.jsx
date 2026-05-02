@@ -9,8 +9,7 @@ import {
   Award,
   X,
   Trash2,
-  Check,
-  Lock
+  Check
 } from 'lucide-react';
 import { database } from './firebase';
 import { ref, onValue, set, remove } from 'firebase/database';
@@ -299,21 +298,16 @@ function App() {
                       : isTodayDate
                       ? 'bg-gradient-to-br from-primary-500 to-secondary-500 text-white shadow-lg cursor-pointer'
                       : isPast
-                      ? 'bg-gray-50 cursor-default opacity-70'
+                      ? 'bg-white cursor-default'
                       : isFuture
-                      ? 'bg-gray-100 cursor-not-allowed opacity-60'
+                      ? 'bg-white cursor-default opacity-50'
                       : 'bg-white hover:shadow-lg cursor-pointer'
                     }
                     ${dayData.length > 0 && !isTodayDate && !isFuture ? 'border-2 border-primary-300' : 'border border-gray-200'}
                   `}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className={`font-semibold ${isTodayDate ? 'text-white' : isPast ? 'text-gray-500' : isFuture ? 'text-gray-400' : 'text-gray-700'}`}>
-                      {dayInfo.day}
-                    </div>
-                    {(isPast || isFuture) && !dayInfo.isOtherMonth && (
-                      <Lock className={`w-3 h-3 ${isTodayDate ? 'text-white' : 'text-gray-400'}`} />
-                    )}
+                  <div className={`font-semibold mb-2 ${isTodayDate ? 'text-white' : 'text-gray-700'}`}>
+                    {dayInfo.day}
                   </div>
 
                   <div className="space-y-1">
