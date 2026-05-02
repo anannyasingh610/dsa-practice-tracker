@@ -311,7 +311,7 @@ function App() {
                     <div className={`font-semibold ${isTodayDate ? 'text-white' : 'text-gray-700'}`}>
                       {dayInfo.day}
                     </div>
-                    {isFuture && !dayInfo.isOtherMonth && (
+                    {isFuture && !dayInfo.isOtherMonth && !isTodayDate && (
                       <Lock className="w-3 h-3 text-gray-400" />
                     )}
                   </div>
